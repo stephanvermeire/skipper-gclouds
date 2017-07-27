@@ -1,13 +1,11 @@
 /**
  * Module dependencies
  */
-var debug = require('debug')('skipper-gcs');
-var qs = require('querystring');
-var Writable = require('stream').Writable;
-var _ = require('lodash');
-var gcloud = require('gcloud');
-var concat = require('concat-stream');
-var mime = require('mime');
+const Writable = require("stream").Writable;
+const _ = require("lodash");
+const storage = require("@google-cloud/storage");
+const concat = require("concat-stream");
+const mime = require("mime");
 
 /**
  * skipper-gcs
@@ -18,44 +16,46 @@ var mime = require('mime');
 module.exports = function GCSStore(globalOpts) {
   globalOpts = globalOpts || {};
   _.defaults(globalOpts, {
-    email: '',
-    bucket: '',
-    scopes: ['https://www.googleapis.com/auth/devstorage.full_control']
+    email: "",
+    bucket: "",
+    scopes: ["https://www.googleapis.com/auth/devstorage.full_control",],
   });
-  var gcs = gcloud.storage({
+  const gcs = storage({
     projectId: globalOpts.projectId,
-    keyFilename: globalOpts.keyFilename
+    keyFilename: globalOpts.keyFilename,
   });
-  var bucket = gcs.bucket(globalOpts.bucket);
-
-  var adapter = {
+  const bucket = gcs.bucket(globalOpts.bucket);
+  const adapter = {
     ls: function(dirname, cb) {
-      bucket.getFiles({ prefix: dirname }, function(err, files) {
+      bucket.getFiles({ prefix: dirname, }, function(err, files) {
         if (err) {
-          cb(err)
+          cb(err);
         } else {
-          files = _.pluck(files, 'name');
+          files = _.map(files, "name");
           cb(null, files);
         }
       });
     },
     read: function(fd, cb) {
-      var remoteReadStream = bucket.file(fd).createReadStream();
+      const remoteReadStream = bucket.file(fd).createReadStream();
+
       remoteReadStream
-        .on('error', function(err) {
+        .on("error", function(err) {
           cb(err);
         })
-        .on('response', function(response) {
+        .on("response", function() {
           // Server connected and responded with the specified status and headers.
         })
-        .on('end', function() {
+        .on("end", function() {
           // The file is fully downloaded.
         })
         .pipe(concat(function(data) {
           cb(null, data);
         }));
     },
-    rm: function(fd, cb) { return cb(new Error('TODO')); },
+    rm: function(fd, cb) {
+      bucket.file(fd).delete(cb);
+    },
     /**
      * A simple receiver for Skipper that writes Upstreams to Google Cloud Storage
      *
@@ -65,34 +65,38 @@ module.exports = function GCSStore(globalOpts) {
     receive: function GCSReceiver(options) {
       options = options || {};
       options = _.defaults(options, globalOpts);
-      var receiver__ = Writable({
-        objectMode: true
+      const receiver__ = Writable({
+        objectMode: true,
       });
+
       // This `_write` method is invoked each time a new file is received
       // from the Readable stream (Upstream) which is pumping filestreams
       // into this receiver.  (filename === `__newFile.filename`).
       receiver__._write = function onFile(__newFile, encoding, done) {
-        var metadata = {};
+        const metadata = {};
+
         _.defaults(metadata, options.metadata);
         metadata.contentType = mime.lookup(__newFile.fd);
-        var file = bucket.file(__newFile.fd);
-        var stream = file.createWriteStream({
-          metadata: metadata
+        const file = bucket.file(__newFile.fd);
+        const stream = file.createWriteStream({
+          metadata: metadata,
         });
-        stream.on('error', function(err) {
-          receiver__.emit('error', err);
+
+        stream.on("error", function(err) {
+          receiver__.emit("error", err);
           return;
-        })
-        stream.on('finish', function() {
+        });
+        stream.on("finish", function() {
           __newFile.extra = file.metadata;
-          __newFile.extra.Location = 'https://storage.googleapis.com/' + globalOpts.bucket + '/' + __newFile.fd;
-          if(globalOpts.public) file.makePublic();
+          __newFile.extra.Location = "https://storage.googleapis.com/" + globalOpts.bucket + "/" + __newFile.fd;
+          if(globalOpts.public) {file.makePublic();}
           done();
         });
         __newFile.pipe(stream);
-      }
+      };
       return receiver__;
-    }
+    },
   };
-  return adapter
+
+  return adapter;
 };
