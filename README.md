@@ -18,7 +18,19 @@ A skipper adapter to allow uploading files to Google Cloud Storage
 
 ## Usage
 
-
+```js
+req.file('avatar').upload({
+  // ...any other options here...
+  adapter: require('skipper-gclouds'),
+  projectId: 'YOUR_PROJECTID',
+  keyFilename: 'YOUR_KEYFILENAME_PATH',
+  email: 'YOUR_GCS_EMAIL',
+  scopes: ['YOUR_SCOPES'],
+  bucket: 'YOUR_GCS_BUCKET',
+  //Are files uplodaded public?
+  public: true,
+}, ...);
+```
 
 ## Special Thanks
 
