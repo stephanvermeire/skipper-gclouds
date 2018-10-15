@@ -94,7 +94,9 @@ module.exports = function GCSStore(globalOpts) {
               done();
             });
           } else {
-            done();
+            file.makePrivate().then(() => {
+              done();
+            });
           }
         });
         __newFile.pipe(stream);
